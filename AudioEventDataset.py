@@ -79,7 +79,7 @@ class AudioEventDataset(Dataset):
 if __name__ == '__main__':
     from glob import glob
     import os
-    src_dir = '/home/ldomeneghetti/Documents/Forensics/project/raw_audio/car_crash'
+    src_dir = '/home/ldomeneghetti/Documents/Forensics/audio_classification_pytorch/raw_audio/car_crash'
     audio_paths_absolute = [x for x in glob('{}/**'.format(src_dir), recursive = True) if '.wav' in x]
     audio_paths = []
     for path in audio_paths_absolute:

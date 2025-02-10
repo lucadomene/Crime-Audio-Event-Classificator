@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-import matplotlib
+import matplotlib.pyplot as plt
 
 from AudioEventDataset import AudioEventDataset
 from models import LSTMNetwork
@@ -33,6 +33,7 @@ def initialize_train(args):
 
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:64"
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
 
     src_dir = args.src_dir
     batch_size = args.batch_size
@@ -46,13 +47,7 @@ def initialize_train(args):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    parameters = {'src_dir': src_dir,
-                  'frame_size': frame_size,
-                  'hop_size': hop_size,
-                  'sample_rate': sample_rate
-                  }
-
-    audio_dataset = AudioEventDataset(**parameters)
+    audio_dataset = AudioEventDataset(src_dir, frame_size, hop_size, sample_rate)
 
     assert (test_size > 0 and test_size < 1), "test_size must be strictly between 0 and 1"
     train_dataset, test_dataset = random_split(audio_dataset, [1.0 - test_size, test_size], generator = torch.Generator().manual_seed(random_state))
@@ -60,11 +55,8 @@ def initialize_train(args):
     train_dataloader = DataLoader(train_dataset, batch_size = batch_size, shuffle = True, collate_fn = collate_audio)
     test_dataloader = DataLoader(test_dataset, batch_size = 1, shuffle = True, collate_fn = collate_audio)
 
-    data_parameters = {'frame_size': frame_size,
-                       'sample_rate': sample_rate,
-                       'classes': audio_dataset.classes}
-    with open('parameters.json', 'w', encoding = 'utf-8') as json_file:
-        json.dump(data_parameters, json_file, ensure_ascii = False, indent = 4)
+    with open('classes.json', 'w', encoding = 'utf-8') as json_file:
+        json.dump({'classes': audio_dataset.classes}, json_file, ensure_ascii = False, indent = 4)
 
     lstm_model = LSTMNetwork(audio_dataset.n_classes, sample_rate, frame_size).to(device)
 
@@ -78,31 +70,29 @@ def initialize_train(args):
 def train(model, train_dl, test_dl, epochs, device, classes):
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr = 0.001)
+    optimizer = torch.optim.AdamW(model.parameters(), lr = 0.001, weight_decay = 1e-4)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
                                                     max_lr = 0.001,
                                                     steps_per_epoch = int(len(train_dl)),
                                                     epochs = epochs,
                                                     anneal_strategy = 'linear')
 
-    best_test_accuracy = 0.0
-
     for epoch in range(epochs):
 
-        train_loss, train_acc = train_one_epoch(model, train_dl, criterion, optimizer, device, classes)
+        train_loss, train_acc = train_one_epoch(model, train_dl, criterion, optimizer, device)
 
 
         print(f"Epoch [{epoch+1}/{epochs}]")
         print(f"    Train Loss: {train_loss:.4f}        Train Acc:  {train_acc:.4f}")
         print("----------------------------------------------------------------")
         
-    test_loss, test_acc = test_model(model, test_dl, criterion)
+    test_loss, test_acc = test_model(model, test_dl, criterion, classes)
     print("\nFinal model:")
     print(f"    Train Loss: {train_loss:.4f}        Train Acc:  {train_acc:.4f}")
     print(f"    Test Loss: {test_loss:.4f}        Test Acc:  {test_acc:.4f}")
 
 
-def train_one_epoch(model, dl, criterion, optimizer, device, classes):
+def train_one_epoch(model, dl, criterion, optimizer, device):
 
     model.train()
 
@@ -127,8 +117,6 @@ def train_one_epoch(model, dl, criterion, optimizer, device, classes):
         _, predicted = torch.max(output, dim = 1)
         _, correct = torch.max(target, dim = 1)
 
-        ConfusionMatrixDisplay.from_predictions(correct.cpu().tolist(), predicted.cpu().tolist(), display_labels = classes, xticks_rotation = 'vertical').plot().figure_.savefig('conf_matrix.png', dpi = 300)
-
         total_data += data.size(0)
 
         partial_correct = torch.sum(predicted == correct).item()
@@ -147,7 +135,7 @@ def train_one_epoch(model, dl, criterion, optimizer, device, classes):
 
 
 
-def test_model(model, dl, criterion):
+def test_model(model, dl, criterion, classes):
 
     device = torch.device('cpu')
 
@@ -159,6 +147,9 @@ def test_model(model, dl, criterion):
     total_data = 0
 
     progress_bar = tqdm(dl, desc = "Testing", unit = "batch")
+
+    correct_labels = torch.empty((0), dtype = int)
+    predicted_labels = torch.empty((0), dtype = int)
 
     with torch.no_grad():
         for batch_index, (data, target) in enumerate(dl):
@@ -172,6 +163,9 @@ def test_model(model, dl, criterion):
             _, predicted = torch.max(output, dim = 1)
             _, correct = torch.max(target, dim = 1)
 
+            correct_labels = torch.cat([correct_labels, correct])
+            predicted_labels = torch.cat([predicted_labels, predicted])
+
             total_data += data.size(0)
 
             partial_correct = torch.sum(predicted == correct).item()
@@ -182,6 +176,11 @@ def test_model(model, dl, criterion):
             total_loss += partial_loss * data.size(0)
 
             progress_bar.set_postfix({"Accuracy": partial_accuracy, "Loss": partial_loss})
+
+    display = ConfusionMatrixDisplay.from_predictions(correct_labels.tolist(), predicted_labels.tolist(), display_labels = classes, xticks_rotation = 'vertical')
+    display.plot()
+    plt.show()
+    display.figure_.savefig('confusion_matrix.png', dpi = 300)
 
     test_loss = total_loss / total_data
     test_acc = total_correct / total_data

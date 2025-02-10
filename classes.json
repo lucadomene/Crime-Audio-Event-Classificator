@@ -1,0 +1,17 @@
+{
+    "classes": [
+        "car_crash",
+        "conversation",
+        "engine_idling",
+        "gun_shot",
+        "jambret",
+        "maling",
+        "rain",
+        "rampok",
+        "road_traffic",
+        "scream",
+        "thunderstorm",
+        "tolong",
+        "wind"
+    ]
+}

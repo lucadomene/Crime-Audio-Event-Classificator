@@ -66,8 +66,10 @@ class LSTMNetwork(nn.Module):
         lstm_out_mel, (h_n_mel, _) = self.bidirectional_lstm_mel(x_mel)
         lstm_out_mfcc, (h_n_mfcc, _) = self.bidirectional_lstm_mfcc(x_mfcc)
 
-        x_mel = lstm_out_mel[:, -1, :]
-        x_mfcc = lstm_out_mfcc[:, -1, :]
+        x_mel = torch.cat([h_n_mel[-2,:,:], h_n_mel[-1,:,:]], dim=1)
+        #x_mel = lstm_out_mel[:, -1, :]
+        x_mfcc = torch.cat([h_n_mfcc[-2,:,:], h_n_mfcc[-1,:,:]], dim=1)
+        #x_mfcc = lstm_out_mfcc[:, -1, :]
 
         x = torch.cat([x_mel, x_mfcc], dim=1)
 
