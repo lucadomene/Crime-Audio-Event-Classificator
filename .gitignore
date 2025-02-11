@@ -1,2 +1,4 @@
 enhanced_audio/
 raw_audio/
+.ipynb_checkpoints/
+__pycache__/

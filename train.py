@@ -180,7 +180,6 @@ def test_model(model, dl, criterion, classes):
     display = ConfusionMatrixDisplay.from_predictions(correct_labels.tolist(), predicted_labels.tolist(), display_labels = classes, xticks_rotation = 'vertical')
     display.plot()
     plt.show()
-    display.figure_.savefig('confusion_matrix.png', dpi = 300)
 
     test_loss = total_loss / total_data
     test_acc = total_correct / total_data
